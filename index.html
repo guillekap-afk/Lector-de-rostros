@@ -14,7 +14,6 @@
     <meta name="apple-mobile-web-app-title" content="Fotos">
 
     <style>
-        /* Estilos básicos para centrar la cámara y el botón en el celular */
         body {
             margin: 0;
             padding: 0;
@@ -27,20 +26,23 @@
             color: white;
             font-family: Arial, sans-serif;
             overflow: hidden;
+            position: relative;
         }
         video {
             width: 100%;
             max-height: 75vh;
             object-fit: cover;
             background-color: #222;
+            z-index: 1;
         }
         .contenedor-controles {
             margin-top: 20px;
             width: 100%;
             display: flex;
             justify-content: center;
+            z-index: 10;
         }
-        /* Tu botón obturador en pantalla */
+        /* Botón obturador en pantalla */
         #boton-camara {
             width: 80px;
             height: 80px;
@@ -53,11 +55,40 @@
         #boton-camara:active {
             background-color: #ccc;
         }
+        /* Contenedor del secreto (puede ser texto o imagen) */
         #resultado {
-            margin-top: 10px;
-            font-size: 24px;
+            position: absolute;
+            top: 30%;
+            font-size: 32px;
             font-weight: bold;
             color: #ffeb3b;
+            text-shadow: 2px 2px 4px #000;
+            text-align: center;
+            z-index: 5;
+            width: 90%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #resultado img {
+            max-width: 80%;
+            max-height: 40vh;
+            object-fit: contain;
+            filter: drop-shadow(0px 4px 8px rgba(0,0,0,0.7));
+        }
+        
+        /* --- ZONA SECRETA DE CONFIGURACIÓN --- */
+        #zona-secreta {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 80px;
+            height: 80px;
+            /* NOTA: Ahora está en ROJO para que lo encuentres al probar. */
+            /* Luego cambia "rgba(255, 0, 0, 0.4)" por "transparent" */
+            background-color: rgba(255, 0, 0, 0.4); 
+            cursor: pointer;
+            z-index: 9999; /* Máxima prioridad, nada lo tapa */
         }
     </style>
 </head>
@@ -66,66 +97,71 @@
     <!-- El visor de la cámara -->
     <video id="video" autoplay playsinline></video>
 
-    <!-- El botón del obturador -->
+    <!-- El botón del obturador visible -->
     <div class="contenedor-controles">
         <button id="boton-camara" onclick="presionarObturador()"></button>
     </div>
 
-    <!-- Lugar donde aparecerá el texto o imagen programada -->
+    <!-- Espacio donde se revelará el secreto -->
     <div id="resultado"></div>
 
+    <!-- Cuadrado de configuración (abajo a la derecha) -->
+    <div id="zona-secreta" onclick="configurarTruco()" ontouchstart="configurarTruco()"></div>
+
     <script>
-        // --- CONFIGURACIÓN DE LA CÁMARA AL ARRANCAR ---
-        const video = document.getElementById('video');
-        
-        // Activa la cámara trasera automáticamente al abrir la web
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })
-            .then(stream => {
-                video.srcObject = stream;
-            })
-            .catch(err => {
-                console.error("Error al acceder a la cámara: ", err);
-            });
-
-
-        // --- LÓGICA DEL PRIMER Y SEGUNDO TOQUE (PANTALLA COMPLETA) ---
         let pantallaCompletaActivada = false;
+        let prediccionProgramada = "Presente"; 
 
+        // --- CÁMARA TRASERA ---
+        const video = document.getElementById('video');
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })
+            .then(stream => { video.srcObject = stream; })
+            .catch(err => { console.error("Error de cámara: ", err); });
+
+        // --- FUNCIÓN PARA ABRIR EL CUADRO ---
+        function configurarTruco(e) {
+            // Evitamos que el toque se duplique entre click y touch
+            if (e) e.preventDefault(); 
+            
+            let eleccion = prompt("Ingresa una palabra O el nombre de una imagen (ej: carta.png):", prediccionProgramada);
+            if (eleccion !== null) {
+                prediccionProgramada = eleccion.trim();
+            }
+        }
+
+        // --- LÓGICA DE LOS DOS TOQUES ---
         function presionarObturador() {
-            const elemento = document.documentElement; // Toda la página web
+            const elemento = document.documentElement;
 
             if (!pantallaCompletaActivada) {
-                // --- PRIMER TOQUE: Oculta las barras de navegación ---
                 if (elemento.requestFullscreen) {
                     elemento.requestFullscreen();
-                } else if (elemento.webkitRequestFullscreen) { /* Safari e iOS */
+                } else if (elemento.webkitRequestFullscreen) {
                     elemento.webkitRequestFullscreen();
-                } else if (elemento.mozRequestFullScreen) { /* Firefox */
+                } else if (elemento.mozRequestFullScreen) {
                     elemento.mozRequestFullScreen();
-                } else if (elemento.msRequestFullscreen) { /* IE/Edge */
+                } else if (elemento.msRequestFullscreen) {
                     elemento.msRequestFullscreen();
                 }
-
-                // Cambiamos el estado: el celular ya está limpio y sin barras
                 pantallaCompletaActivada = true;
-                console.log("Modo nativo activo. Próximo toque saca la foto.");
-
             } else {
-                // --- SEGUNDO TOQUE EN ADELANTE: Saca la foto y ejecuta la magia ---
                 ejecutarCapturaDeFoto();
             }
         }
 
-        // --- LA FUNCIÓN QUE CORRE TU MAGIA ---
+        // --- REVELACIÓN ---
         function ejecutarCapturaDeFoto() {
-            console.log("¡Foto tomada!");
-            
-            // Aquí se muestra la palabra o imagen que programamos para tu rutina
             const contenedorResultado = document.getElementById('resultado');
-            contenedorResultado.innerText = "¡AQUÍ TU PALABRA PROGRAMADA!"; 
-            
-            // Si tenías código de canvas para congelar la imagen, iría aquí abajo:
-            // ...
+            contenedorResultado.innerHTML = "";
+
+            if (prediccionProgramada.toLowerCase().endsWith('.png') || prediccionProgramada.toLowerCase().endsWith('.jpg')) {
+                const imagenSecreta = document.createElement('img');
+                imagenSecreta.src = prediccionProgramada; 
+                imagenSecreta.alt = "Predicción";
+                contenedorResultado.appendChild(imagenSecreta);
+            } else {
+                contenedorResultado.innerText = prediccionProgramada;
+            }
         }
     </script>
 </body>

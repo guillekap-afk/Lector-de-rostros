@@ -2,199 +2,130 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Camera</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Mi App de Fotos</title>
+
+    <!-- Vinculación del manifiesto PWA para que parezca nativa -->
+    <link rel="manifest" href="manifest.json">
+   
+    <!-- Configuración para pantalla completa obligatoria en iPhone (iOS) -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Fotos">
+
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
-        body, html { width: 100%; height: 100%; background-color: #000; overflow: hidden; font-family: Roboto, sans-serif; }
-        
-        /* Contenedor flexible usando el alto dinámico del celular */
-        .app-container { 
-            position: relative; 
-            width: 100%; 
-            height: 100vh; 
-            height: 100dvh; 
-            display: flex; 
-            flex-direction: column; 
-            background: #000;
-        }
-        
-        /* Vista de cámara fija y centrada sin deformar */
-        .viewfinder { 
-            position: relative; 
-            width: 100%; 
-            flex-grow: 1; 
-            background: #000; 
-            display: flex; 
-            align-items: center; 
+        /* Estilos básicos para centrar la cámara y el botón en el celular */
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            display: flex;
+            flex-direction: column;
             justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: white;
+            font-family: Arial, sans-serif;
             overflow: hidden;
         }
-        video, canvas { 
-            width: 100%; 
-            height: 100%; 
-            object-fit: cover; 
+        video {
+            width: 100%;
+            max-height: 75vh;
+            object-fit: cover;
+            background-color: #222;
         }
-        canvas { display: none; }
-        
-        /* Barra inferior ajustada para que nunca se desplace ni se oculte */
-        .bottom-bar { 
-            height: 140px; 
-            background: #000; 
-            display: flex; 
-            align-items: center; 
-            justify-content: space-around; 
-            padding: 10px 20px 30px 20px;
-            flex-shrink: 0;
+        .contenedor-controles {
+            margin-top: 20px;
+            width: 100%;
+            display: flex;
+            justify-content: center;
         }
-        .gallery-preview, .switch-camera { 
-            width: 48px; 
-            height: 48px; 
-            border-radius: 50%; 
-            background: rgba(255,255,255,0.2); 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            border: none; 
+        /* Tu botón obturador en pantalla */
+        #boton-camara {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background-color: #fff;
+            border: 5px solid #444;
+            cursor: pointer;
+            outline: none;
         }
-        .gallery-preview img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: none; }
-        .shutter-btn { width: 72px; height: 72px; border-radius: 50%; background: #fff; border: 5px solid #000; outline: 4px solid #fff; cursor: pointer; transition: transform 0.1s; }
-        .shutter-btn:active { transform: scale(0.9); }
-        .icon { width: 24px; height: 24px; fill: #fff; }
-        
-        /* Trigger invisible para el panel secreto (Esquina superior derecha) */
-        .secret-trigger { position: absolute; top: 0; right: 0; width: 70px; height: 70px; z-index: 999; background: transparent; }
-        
-        /* Panel de control flotante */
-        .secret-panel { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #222; color: #fff; padding: 20px; border-radius: 12px; z-index: 1000; width: 85%; max-width: 300px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
-        .secret-panel h3 { margin-bottom: 12px; font-size: 13px; text-align: center; color: #aaa; letter-spacing: 1px; }
-        .secret-panel input { width: 100%; padding: 12px; background: #333; color: #fff; border: 1px solid #444; border-radius: 6px; font-size: 16px; margin-bottom: 15px; outline: none; text-align: center; }
-        .secret-panel button { width: 100%; padding: 10px; background: #4285f4; color: white; border: none; border-radius: 6px; font-size: 14px; font-weight: bold; }
+        #boton-camara:active {
+            background-color: #ccc;
+        }
+        #resultado {
+            margin-top: 10px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #ffeb3b;
+        }
     </style>
 </head>
 <body>
 
-    <div class="app-container">
-        <div class="secret-trigger" id="secretTrigger"></div>
+    <!-- El visor de la cámara -->
+    <video id="video" autoplay playsinline></video>
 
-        <div class="viewfinder">
-            <video id="webcam" autoplay playsinline></video>
-            <canvas id="photoCanvas"></canvas>
-        </div>
-
-        <div class="bottom-bar">
-            <button class="gallery-preview" id="galleryBtn">
-                <img id="galleryThumb" src="" alt="Thumb">
-            </button>
-            <button class="shutter-btn" id="shutterBtn"></button>
-            <button class="switch-camera">
-                <svg class="icon" viewBox="0 0 24 24"><path d="M19 8l-4 4h3c0 3.31-2.69 6-6 6-1.01 0-1.97-.25-2.8-.7l-1.46 1.46C8.97 19.54 10.43 20 12 20c4.42 0 8-3.58 8-8h3l-4-4zM6 12c0-3.31 2.69-6 6-6 1.01 0 1.97-.25 2.8.7l1.46-1.46C15.03 4.46 13.57 4 12 4c-4.42 0-8 3.58-8 8H1l4 4 4-4H6z"/></svg>
-            </button>
-        </div>
+    <!-- El botón del obturador -->
+    <div class="contenedor-controles">
+        <button id="boton-camara" onclick="presionarObturador()"></button>
     </div>
 
-    <div class="secret-panel" id="secretPanel">
-        <h3>INGRESAR PREDICCIÓN</h3>
-        <input type="text" id="magicInput" placeholder="Ej: 7d o p:palabra">
-        <button id="closePanelBtn">Listo</button>
-    </div>
+    <!-- Lugar donde aparecerá el texto o imagen programada -->
+    <div id="resultado"></div>
 
     <script>
-        const video = document.getElementById('webcam');
-        const canvas = document.getElementById('photoCanvas');
-        const ctx = canvas.getContext('2d');
-        const shutterBtn = document.getElementById('shutterBtn');
-        const galleryThumb = document.getElementById('galleryThumb');
-        const secretTrigger = document.getElementById('secretTrigger');
-        const secretPanel = document.getElementById('secretPanel');
-        const magicInput = document.getElementById('magicInput');
-        const closePanelBtn = document.getElementById('closePanelBtn');
+        // --- CONFIGURACIÓN DE LA CÁMARA AL ARRANCAR ---
+        const video = document.getElementById('video');
+        
+        // Activa la cámara trasera automáticamente al abrir la web
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })
+            .then(stream => {
+                video.srcObject = stream;
+            })
+            .catch(err => {
+                console.error("Error al acceder a la cámara: ", err);
+            });
 
-        let modoTexto = false;
-        let valorForzado = "cartas/3c.png"; 
-        let clicsSecretos = 0;
 
-        // CAMBIO CLAVE: "environment" fuerza el uso de la cámara trasera
-        navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }, 
-            audio: false 
-        })
-        .then(stream => { video.srcObject = stream; })
-        .catch(err => { alert("Error de cámara: " + err); });
+        // --- LÓGICA DEL PRIMER Y SEGUNDO TOQUE (PANTALLA COMPLETA) ---
+        let pantallaCompletaActivada = false;
 
-        secretTrigger.addEventListener('click', () => {
-            clicsSecretos++;
-            if (clicsSecretos === 3) {
-                secretPanel.style.display = 'block';
-                magicInput.value = ""; 
-                magicInput.focus();
-                clicsSecretos = 0;
-            }
-            setTimeout(() => { if(clicsSecretos > 0) clicsSecretos = 0; }, 2000);
-        });
+        function presionarObturador() {
+            const elemento = document.documentElement; // Toda la página web
 
-        closePanelBtn.addEventListener('click', () => {
-            const inputVal = magicInput.value.trim();
-            if (inputVal !== "") {
-                if (inputVal.toLowerCase().startsWith('p:')) {
-                    modoTexto = true;
-                    valorForzado = inputVal.substring(2);
-                } else {
-                    modoTexto = false;
-                    valorForzado = "cartas/" + inputVal.toLowerCase() + ".png"; 
+            if (!pantallaCompletaActivada) {
+                // --- PRIMER TOQUE: Oculta las barras de navegación ---
+                if (elemento.requestFullscreen) {
+                    elemento.requestFullscreen();
+                } else if (elemento.webkitRequestFullscreen) { /* Safari e iOS */
+                    elemento.webkitRequestFullscreen();
+                } else if (elemento.mozRequestFullScreen) { /* Firefox */
+                    elemento.mozRequestFullScreen();
+                } else if (elemento.msRequestFullscreen) { /* IE/Edge */
+                    elemento.msRequestFullscreen();
                 }
-            }
-            secretPanel.style.display = 'none';
-        });
 
-        shutterBtn.addEventListener('click', () => {
-            if (video.style.display === 'none') {
-                video.style.display = 'block';
-                canvas.style.display = 'none';
-                return;
-            }
+                // Cambiamos el estado: el celular ya está limpio y sin barras
+                pantallaCompletaActivada = true;
+                console.log("Modo nativo activo. Próximo toque saca la foto.");
 
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-            if (modoTexto) {
-                ctx.globalAlpha = 0.50;
-                const tamanoFuente = Math.round(canvas.width * 0.08);
-                ctx.font = `bold ${tamanoFuente}px Roboto, sans-serif`;
-                ctx.fillStyle = "#ffffff";
-                ctx.textAlign = "center";
-                ctx.textBaseline = "middle";
-                ctx.fillText(valorForzado, canvas.width / 2, canvas.height * 0.25);
-                ctx.globalAlpha = 1.0;
-                finalizarCaptura();
             } else {
-                const imgCarta = new Image();
-                imgCarta.src = valorForzado;
-
-                imgCarta.onload = function() {
-                    const anchoCarta = canvas.width * 0.25;
-                    const altoCarta = anchoCarta * 1.4;
-                    const x = (canvas.width - anchoCarta) / 2;
-                    const y = canvas.height * 0.22;
-
-                    ctx.globalAlpha = 0.45;
-                    ctx.drawImage(imgCarta, x, y, anchoCarta, altoCarta);
-                    ctx.globalAlpha = 1.0;
-                    finalizarCaptura();
-                };
-                imgCarta.onerror = function() {
-                    finalizarCaptura();
-                };
+                // --- SEGUNDO TOQUE EN ADELANTE: Saca la foto y ejecuta la magia ---
+                ejecutarCapturaDeFoto();
             }
-        });
+        }
 
-        function finalizarCaptura() {
-            video.style.display = 'none';
-            canvas.style.display = 'block';
-            const dataURL = canvas.toDataURL('image/jpeg');
-            galleryThumb.src = dataURL;
-            galleryThumb.style.display = 'block';
+        // --- LA FUNCIÓN QUE CORRE TU MAGIA ---
+        function ejecutarCapturaDeFoto() {
+            console.log("¡Foto tomada!");
+            
+            // Aquí se muestra la palabra o imagen que programamos para tu rutina
+            const contenedorResultado = document.getElementById('resultado');
+            contenedorResultado.innerText = "¡AQUÍ TU PALABRA PROGRAMADA!"; 
+            
+            // Si tenías código de canvas para congelar la imagen, iría aquí abajo:
+            // ...
         }
     </script>
 </body>

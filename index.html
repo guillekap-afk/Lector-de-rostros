@@ -5,10 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Mi App de Fotos</title>
 
-    <!-- Vinculación del manifiesto PWA para que parezca nativa -->
     <link rel="manifest" href="manifest.json">
    
-    <!-- Configuración para pantalla completa obligatoria en iPhone (iOS) -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Fotos">
@@ -28,12 +26,22 @@
             overflow: hidden;
             position: relative;
         }
-        video {
+        /* Contenedor donde se muestra el video o la foto congelada */
+        #contenedor-vista {
             width: 100%;
             max-height: 75vh;
-            object-fit: cover;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
             background-color: #222;
-            z-index: 1;
+        }
+        video, canvas {
+            width: 100%;
+            object-fit: cover;
+        }
+        canvas {
+            display: none; /* Oculto hasta que se saca la foto */
         }
         .contenedor-controles {
             margin-top: 20px;
@@ -42,7 +50,6 @@
             justify-content: center;
             z-index: 10;
         }
-        /* Botón obturador en pantalla */
         #boton-camara {
             width: 80px;
             height: 80px;
@@ -55,7 +62,7 @@
         #boton-camara:active {
             background-color: #ccc;
         }
-        /* Contenedor del secreto (puede ser texto o imagen) */
+        /* Contenedor del secreto superpuesto */
         #resultado {
             position: absolute;
             top: 30%;
@@ -69,6 +76,7 @@
             display: flex;
             justify-content: center;
             align-items: center;
+            pointer-events: none;
         }
         #resultado img {
             max-width: 80%;
@@ -77,87 +85,99 @@
             filter: drop-shadow(0px 4px 8px rgba(0,0,0,0.7));
         }
         
-        /* --- ZONA SECRETA DE CONFIGURACIÓN --- */
+        /* --- ZONA SECRETA TOTALMENTE INVISIBLE --- */
         #zona-secreta {
             position: absolute;
-            bottom: 0;
-            right: 0;
-            width: 80px;
-            height: 80px;
-            /* NOTA: Ahora está en ROJO para que lo encuentres al probar. */
-            /* Luego cambia "rgba(255, 0, 0, 0.4)" por "transparent" */
-            background-color: rgba(255, 0, 0, 0.4); 
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 50vh; 
+            background-color: transparent; /* AHORA SÍ ES INVISIBLE */
             cursor: pointer;
-            z-index: 9999; /* Máxima prioridad, nada lo tapa */
+            z-index: 9999;
         }
     </style>
 </head>
 <body>
 
-    <!-- El visor de la cámara -->
-    <video id="video" autoplay playsinline></video>
+    <div id="contenedor-vista">
+        <!-- El visor en vivo -->
+        <video id="video" autoplay playsinline></video>
+        <!-- La foto capturada -->
+        <canvas id="canvas"></canvas>
+        <!-- El secreto revelado -->
+        <div id="resultado"></div>
+    </div>
 
-    <!-- El botón del obturador visible -->
     <div class="contenedor-controles">
         <button id="boton-camara" onclick="presionarObturador()"></button>
     </div>
 
-    <!-- Espacio donde se revelará el secreto -->
-    <div id="resultado"></div>
-
-    <!-- Cuadrado de configuración (abajo a la derecha) -->
-    <div id="zona-secreta" onclick="configurarTruco()" ontouchstart="configurarTruco()"></div>
+    <!-- Zona invisible (Mitad superior de la pantalla) -->
+    <div id="zona-secreta" onclick="configurarTruco(event)"></div>
 
     <script>
         let pantallaCompletaActivada = false;
         let prediccionProgramada = "Presente"; 
 
-        // --- CÁMARA TRASERA ---
         const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const contenedorResultado = document.getElementById('resultado');
+
+        // --- ARRANCAR CÁMARA ---
         navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })
             .then(stream => { video.srcObject = stream; })
             .catch(err => { console.error("Error de cámara: ", err); });
 
-        // --- FUNCIÓN PARA ABRIR EL CUADRO ---
+        // --- MENÚ OCULTO ---
         function configurarTruco(e) {
-            // Evitamos que el toque se duplique entre click y touch
-            if (e) e.preventDefault(); 
-            
-            let eleccion = prompt("Ingresa una palabra O el nombre de una imagen (ej: carta.png):", prediccionProgramada);
+            if (e) e.stopPropagation();
+            let eleccion = prompt("Ingresa palabra o archivo (ej: carta.png):", prediccionProgramada);
             if (eleccion !== null) {
                 prediccionProgramada = eleccion.trim();
             }
         }
 
-        // --- LÓGICA DE LOS DOS TOQUES ---
+        // --- LÓGICA DE DOS TOQUES ---
         function presionarObturador() {
             const elemento = document.documentElement;
 
             if (!pantallaCompletaActivada) {
-                if (elemento.requestFullscreen) {
-                    elemento.requestFullscreen();
-                } else if (elemento.webkitRequestFullscreen) {
-                    elemento.webkitRequestFullscreen();
-                } else if (elemento.mozRequestFullScreen) {
-                    elemento.mozRequestFullScreen();
-                } else if (elemento.msRequestFullscreen) {
-                    elemento.msRequestFullscreen();
-                }
+                // PRIMER TOQUE: Limpia la pantalla
+                if (elemento.requestFullscreen) { elemento.requestFullscreen(); }
+                else if (elemento.webkitRequestFullscreen) { elemento.webkitRequestFullscreen(); }
+                
                 pantallaCompletaActivada = true;
             } else {
-                ejecutarCapturaDeFoto();
+                // SEGUNDO TOQUE: Captura real y magia
+                sacarFotoReal();
             }
         }
 
-        // --- REVELACIÓN ---
-        function ejecutarCapturaDeFoto() {
-            const contenedorResultado = document.getElementById('resultado');
-            contenedorResultado.innerHTML = "";
+        // --- CONGELAR IMAGEN Y MOSTRAR SECRETO ---
+        function sacarFotoReal() {
+            // Ajustamos el tamaño del canvas al tamaño real del video
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            
+            // Dibujamos el frame actual del video en el canvas
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            // Intercambiamos pantallas: ocultamos video en vivo, mostramos foto fija
+            video.style.display = 'none';
+            canvas.style.display = 'block';
 
+            // Apagamos la cámara trasera para ahorrar batería
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+            }
+
+            // Mostramos el secreto configurado encima de la foto
+            contenedorResultado.innerHTML = "";
             if (prediccionProgramada.toLowerCase().endsWith('.png') || prediccionProgramada.toLowerCase().endsWith('.jpg')) {
                 const imagenSecreta = document.createElement('img');
-                imagenSecreta.src = prediccionProgramada; 
-                imagenSecreta.alt = "Predicción";
+                imagenSecreta.src = prediccionProgramada;
                 contenedorResultado.appendChild(imagenSecreta);
             } else {
                 contenedorResultado.innerText = prediccionProgramada;
